@@ -1,7 +1,7 @@
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
 
-//Carregando as imagens do caramelo, do fundo, do carro, da moto e da tela de morte
+//Carregando as imagens do caramelo, do fundo, do carro, da moto, da chinela e da tela de morte
 const carameloImg = new Image();
 carameloImg.src = 'caramelo_andando_sprite.png';
 
@@ -13,6 +13,9 @@ carroImg.src = 'taxi_sprite.png';
 
 const motoImg = new Image();
 motoImg.src = 'moto_sprite.png';
+
+const chinelaImg = new Image();
+chinelaImg.src = 'chinela_sprite.png';
 
 const telaMorteImg = new Image();
 telaMorteImg.src = 'telaDeMorte.png';
@@ -58,6 +61,16 @@ const motoSprite = {
     velocidadeAnimacao: 5
 };
 
+//Configurando os quadros da animação da chinela (8 quadros na horizontal)[cite: 3]
+const chinelaSprite = {
+    totalQuadros: 8,
+    quadroAtual: 0,
+    larguraQuadro: 100,
+    alturaQuadro: 100,
+    contadorFrames: 0,
+    velocidadeAnimacao: 4
+};
+
 //Criando o objeto do player (caramelo)
 const caramelo = {
     x: 60,
@@ -70,7 +83,7 @@ const caramelo = {
     noChao: true
 };
 
-//Estado de game over e área do botão REINICIAR na tela de morte
+//Estado de game over e área do botão REINICIAR na tela de morte[cite: 2]
 let gameOver = false;
 const botaoReiniciar = {
     xInicio: 0.38,
@@ -83,19 +96,19 @@ const botaoReiniciar = {
 let pontos = 0;
 let contadorPontos = 0;
 let recorde = Number(localStorage.getItem('recordeCaramelo')) || 0;
+const pontosParaChinela = 300;
 
-//Lista que guarda os carros que aparecem na tela
+//Listas que guardam os obstáculos na tela
 let carros = [];
-let tempoProximoCarro = sortearTempoCarro();
-
-//Lista que guarda as motos que aparecem na tela
 let motos = [];
-let tempoProximaMoto = sortearTempoMoto();
+let chinelas = [];
+let tempoProximoObstaculo = sortearTempoObstaculo();
+let ultimoTipoObstaculo = null;
 
 //Distância mínima entre obstáculos para não virem colados ou no mesmo tempo
-const distanciaMinimaSpawn = 240;
+const distanciaMinimaSpawn = 260;
 
-//Função que verifica se já tem carro ou moto muito perto do spawn
+//Função que verifica se já tem algum obstáculo muito perto do spawn
 function spawnOcupado() {
     for (let i = 0; i < carros.length; i++) {
         if (carros[i].x + carros[i].largura > canvas.width - distanciaMinimaSpawn) {
@@ -109,21 +122,32 @@ function spawnOcupado() {
         }
     }
 
+    for (let i = 0; i < chinelas.length; i++) {
+        if (chinelas[i].x + chinelas[i].largura > canvas.width - distanciaMinimaSpawn) {
+            return true;
+        }
+    }
+
     return false;
 }
 
-//Função que sorteia um tempo entre 1s e 4s para criar o próximo carro
-function sortearTempoCarro() {
-    const tempoMinimo = 60;  
-    const tempoMaximo = 240; 
+//Função que sorteia um tempo para criar o próximo obstáculo
+function sortearTempoObstaculo() {
+    const tempoMinimo = 70;  
+    const tempoMaximo = 210; 
     return Math.floor(Math.random() * (tempoMaximo - tempoMinimo + 1)) + tempoMinimo;
 }
 
-//Função que sorteia um tempo para criar a próxima moto
-function sortearTempoMoto() {
-    const tempoMinimo = 90;  
-    const tempoMaximo = 260; 
-    return Math.floor(Math.random() * (tempoMaximo - tempoMinimo + 1)) + tempoMinimo;
+//Função que escolhe aleatoriamente entre carro, moto e chinela (após 300 pts) sem repetir o último
+function sortearTipoObstaculo() {
+    const opcoes = pontos >= pontosParaChinela
+        ? ['carro', 'moto', 'chinela']
+        : ['carro', 'moto'];
+
+    const filtradas = opcoes.filter((tipo) => tipo !== ultimoTipoObstaculo);
+    const escolhida = filtradas[Math.floor(Math.random() * filtradas.length)];
+    ultimoTipoObstaculo = escolhida;
+    return escolhida;
 }
 
 //Função que cria um novo carro fora da tela
@@ -156,6 +180,35 @@ function criarMoto() {
     });
 }
 
+//Função que cria uma nova chinela voadora fora da tela
+function criarChinela() {
+    const larguraChinela = 58;
+    const alturaChinela = Math.round(larguraChinela * (chinelaSprite.alturaQuadro / chinelaSprite.larguraQuadro));
+    const alturaVoo = chaoY - caramelo.altura - 18;
+
+    chinelas.push({
+        x: canvas.width,
+        y: alturaVoo,
+        largura: larguraChinela,
+        altura: alturaChinela,
+        velocidade: 8,
+        pontuou: false
+    });
+}
+
+//Função que cria o próximo obstáculo sorteado
+function criarProximoObstaculo() {
+    const tipo = sortearTipoObstaculo();
+
+    if (tipo === 'carro') {
+        criarCarro();
+    } else if (tipo === 'moto') {
+        criarMoto();
+    } else if (tipo === 'chinela') {
+        criarChinela();
+    }
+}
+
 //Função que atualiza e salva o recorde se a pontuação atual for maior
 function atualizarRecorde() {
     if (pontos > recorde) {
@@ -164,18 +217,18 @@ function atualizarRecorde() {
     }
 }
 
-//Função que reinicia o jogo inteiro quando clica no botão REINICIAR
+//Função que reinicia o jogo inteiro quando clica no botão REINICIAR[cite: 2]
 function reiniciarJogo() {
     gameOver = false;
     atualizarRecorde();
     pontos = 0;
     contadorPontos = 0;
+    ultimoTipoObstaculo = null;
 
     carros = [];
-    tempoProximoCarro = sortearTempoCarro();
-
     motos = [];
-    tempoProximaMoto = sortearTempoMoto();
+    chinelas = [];
+    tempoProximoObstaculo = sortearTempoObstaculo();
 
     fundo.x = 0;
 
@@ -189,6 +242,8 @@ function reiniciarJogo() {
     carroSprite.contadorFrames = 0;
     motoSprite.quadroAtual = 0;
     motoSprite.contadorFrames = 0;
+    chinelaSprite.quadroAtual = 0;
+    chinelaSprite.contadorFrames = 0;
 }
 
 //Função que verifica se o caramelo encostou em algum obstáculo
@@ -214,7 +269,7 @@ function pular() {
     }
 }
 
-//Função que verifica se o clique/toque caiu no botão REINICIAR da tela de morte
+//Função que verifica se o clique/toque caiu no botão REINICIAR da tela de morte[cite: 2]
 function verificarCliqueTelaMorte(evento) {
     if (!gameOver) return;
 
@@ -233,7 +288,7 @@ function verificarCliqueTelaMorte(evento) {
     }
 }
 
-//Configurando os botões para pular e reiniciar na tela de morte
+//Configurando os botões para pular e reiniciar na tela de morte[cite: 2]
 document.addEventListener('keydown', (evento) => {
     if (gameOver && (evento.code === 'Enter' || evento.code === 'Space')) {
         reiniciarJogo();
@@ -332,14 +387,20 @@ function atualizar() {
         motoSprite.contadorFrames = 0;
     }
 
-    //Controlando o tempo para aparecer novos carros
-    tempoProximoCarro--;
-    if (tempoProximoCarro <= 0) {
+    chinelaSprite.contadorFrames++;
+    if (chinelaSprite.contadorFrames >= chinelaSprite.velocidadeAnimacao) {
+        chinelaSprite.quadroAtual = (chinelaSprite.quadroAtual + 1) % chinelaSprite.totalQuadros;
+        chinelaSprite.contadorFrames = 0;
+    }
+
+    //Controlando o tempo para criar o próximo obstáculo (carro, moto ou chinela)
+    tempoProximoObstaculo--;
+    if (tempoProximoObstaculo <= 0) {
         if (!spawnOcupado()) {
-            criarCarro();
-            tempoProximoCarro = sortearTempoCarro();
+            criarProximoObstaculo();
+            tempoProximoObstaculo = sortearTempoObstaculo();
         } else {
-            tempoProximoCarro = 20;
+            tempoProximoObstaculo = 20;
         }
     }
 
@@ -365,17 +426,6 @@ function atualizar() {
         }
     }
 
-    //Controlando o tempo para aparecer novas motos
-    tempoProximaMoto--;
-    if (tempoProximaMoto <= 0) {
-        if (!spawnOcupado()) {
-            criarMoto();
-            tempoProximaMoto = sortearTempoMoto();
-        } else {
-            tempoProximaMoto = 20;
-        }
-    }
-
     //Movendo cada moto e verificando colisão e pontuação ao passar
     for (let i = motos.length - 1; i >= 0; i--) {
         const moto = motos[i];
@@ -395,6 +445,28 @@ function atualizar() {
 
         if (moto.x + moto.largura < 0) {
             motos.splice(i, 1);
+        }
+    }
+
+    //Movendo cada chinela e verificando colisão e pontuação ao passar
+    for (let i = chinelas.length - 1; i >= 0; i--) {
+        const chinela = chinelas[i];
+        chinela.x -= chinela.velocidade;
+
+        if (!chinela.pontuou && chinela.x + chinela.largura < caramelo.x) {
+            chinela.pontuou = true;
+            pontos += 20;
+            atualizarRecorde();
+        }
+
+        if (verificarColisao(caramelo, chinela)) {
+            atualizarRecorde();
+            gameOver = true;
+            break;
+        }
+
+        if (chinela.x + chinela.largura < 0) {
+            chinelas.splice(i, 1);
         }
     }
 }
@@ -436,10 +508,21 @@ function desenhar() {
         );
     }
 
+    const recorteChinelaX = chinelaSprite.quadroAtual * chinelaSprite.larguraQuadro;
+
+    for (let i = 0; i < chinelas.length; i++) {
+        const chinela = chinelas[i];
+        ctx.drawImage(
+            chinelaImg,
+            recorteChinelaX, 0, chinelaSprite.larguraQuadro, chinelaSprite.alturaQuadro,
+            chinela.x, chinela.y, chinela.largura, chinela.altura
+        );
+    }
+
     desenharPontuacao();
 
     if (gameOver) {
-        ctx.drawImage(telaMorteImg, 0, 0, canvas.width, canvas.height);
+        ctx.drawImage(telaMorteImg, 0, 0, canvas.width, canvas.height); //[cite: 2]
     }
 }
 
@@ -453,15 +536,18 @@ function gameLoop() {
 //Quantidade de imagens carregadas
 let imagensCarregadas = 0;
 
-//Função que inicia o loop principal do jogo logo após carregar as 5 imagens
+//Função que inicia o loop principal do jogo logo após carregar as 6 imagens
 function verificarCarregamento() {
     motoSprite.larguraQuadro = motoImg.naturalWidth / motoSprite.totalQuadros;
     motoSprite.alturaQuadro = motoImg.naturalHeight;
 
+    chinelaSprite.larguraQuadro = chinelaImg.naturalWidth / chinelaSprite.totalQuadros;
+    chinelaSprite.alturaQuadro = chinelaImg.naturalHeight;
+
     imagensCarregadas++;
 
     //SE a quantidade de imagens carregas for igual a quantidade de imagens, começa
-    if (imagensCarregadas === 5) {
+    if (imagensCarregadas === 6) {
         gameLoop();
     }
 }
@@ -470,4 +556,5 @@ carameloImg.onload = verificarCarregamento;
 fundoImg.onload = verificarCarregamento;
 carroImg.onload = verificarCarregamento;
 motoImg.onload = verificarCarregamento;
+chinelaImg.onload = verificarCarregamento;
 telaMorteImg.onload = verificarCarregamento;
