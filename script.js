@@ -1,7 +1,7 @@
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
 
-//Carregando as imagens do caramelo, do fundo e do carro
+//Carregando as imagens do caramelo, do fundo, do carro e da moto
 const carameloImg = new Image();
 carameloImg.src = 'caramelo_andando_sprite.png';
 
@@ -9,7 +9,10 @@ const fundoImg = new Image();
 fundoImg.src = 'fundo.png';
 
 const carroImg = new Image();
-carroImg.src = 'taxi_sprite.png'; // Coloque o nome exato da sprite do seu carro
+carroImg.src = 'taxi_sprite.png';
+
+const motoImg = new Image();
+motoImg.src = 'moto_sprite.png';
 
 //Configurando o fundo de acordo com a proporção da imagem
 const fundo = {
@@ -42,6 +45,16 @@ const carroSprite = {
     velocidadeAnimacao: 5
 };
 
+//Configurando os quadros da animação da moto
+const motoSprite = {
+    totalQuadros: 8,
+    quadroAtual: 0,
+    larguraQuadro: 100,
+    alturaQuadro: 100,
+    contadorFrames: 0,
+    velocidadeAnimacao: 5
+};
+
 //Criando o objeto do player (caramelo)
 const caramelo = {
     x: 60,
@@ -58,6 +71,30 @@ const caramelo = {
 let carros = [];
 let tempoProximoCarro = sortearTempoCarro();
 
+//Lista que guarda as motos que aparecem na tela
+let motos = [];
+let tempoProximaMoto = sortearTempoMoto();
+
+//Distância mínima entre obstáculos para não virem colados ou no mesmo tempo
+const distanciaMinimaSpawn = 240;
+
+//Função que verifica se já tem carro ou moto muito perto do spawn
+function spawnOcupado() {
+    for (let i = 0; i < carros.length; i++) {
+        if (carros[i].x + carros[i].largura > canvas.width - distanciaMinimaSpawn) {
+            return true;
+        }
+    }
+
+    for (let i = 0; i < motos.length; i++) {
+        if (motos[i].x + motos[i].largura > canvas.width - distanciaMinimaSpawn) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
 //Função que sorteia um tempo entre 1s e 4s para criar o próximo carro
 function sortearTempoCarro() {
     const tempoMinimo = 60;  
@@ -65,10 +102,15 @@ function sortearTempoCarro() {
     return Math.floor(Math.random() * (tempoMaximo - tempoMinimo + 1)) + tempoMinimo;
 }
 
+//Função que sorteia um tempo para criar a próxima moto
+function sortearTempoMoto() {
+    const tempoMinimo = 90;  
+    const tempoMaximo = 260; 
+    return Math.floor(Math.random() * (tempoMaximo - tempoMinimo + 1)) + tempoMinimo;
+}
+
 //Função que cria um novo carro fora da tela
 function criarCarro() {
-
-    //Garantindo a proporção do carro
     const larguraCarro = 98;
     const alturaCarro = 70;
 
@@ -81,32 +123,44 @@ function criarCarro() {
     });
 }
 
-//Função que reinicia o jogo inteiro quando o caramelo bate em um carro
-function reiniciarJogo() {
+//Função que cria uma nova moto fora da tela
+function criarMoto() {
+    const larguraMoto = 85;
+    const alturaMoto = Math.round(larguraMoto * (motoSprite.alturaQuadro / motoSprite.larguraQuadro));
 
-    //Limpando os carros e sorteia um novo tempo para o próximo aparecer
+    motos.push({
+        x: canvas.width,
+        y: chaoY - alturaMoto,
+        largura: larguraMoto,
+        altura: alturaMoto,
+        velocidade: 7
+    });
+}
+
+//Função que reinicia o jogo inteiro quando o caramelo bate em algum obstáculo
+function reiniciarJogo() {
     carros = [];
     tempoProximoCarro = sortearTempoCarro();
 
-    //Voltando o fundo exatamente para o início
+    motos = [];
+    tempoProximaMoto = sortearTempoMoto();
+
     fundo.x = 0;
 
-    //Resetando a posição e a física do caramelo
     caramelo.y = chaoY - caramelo.altura;
     caramelo.velocidadeY = 0;
     caramelo.noChao = true;
 
-    //Resetando os quadros das animações para o início
     sprite.quadroAtual = 0;
     sprite.contadorFrames = 0;
     carroSprite.quadroAtual = 0;
     carroSprite.contadorFrames = 0;
+    motoSprite.quadroAtual = 0;
+    motoSprite.contadorFrames = 0;
 }
 
-//Função que verifica se o caramelo encostou em algum carro
+//Função que verifica se o caramelo encostou em algum obstáculo
 function verificarColisao(player, obstaculo) {
-
-    //Mrgem nas bordas para a colisão não pegar nas áreas transparentes da sprite
     const margemX = 14;
     const margemY = 12;
 
@@ -120,25 +174,15 @@ function verificarColisao(player, obstaculo) {
 
 //Função que faz o cachorro pular
 function pular() {
-
-    //SE o caramelo estiver no chão
     if (caramelo.noChao) {
-
-        //Então eu faço ele subir de acordo com a força do pulo configurada
         caramelo.velocidadeY = caramelo.forcaPulo;
-
-        //E informo que ele não está mais no chão
         caramelo.noChao = false;
     }
 }
 
 //Configurando os botões para pular
 document.addEventListener('keydown', (evento) => {
-  
-    //SE apertar ESPAÇO ou SETA para cima
     if (evento.code === 'Space' || evento.code === 'ArrowUp') {
-
-        //Chamando a função de pular
         pular();
     }
 });
@@ -146,29 +190,23 @@ document.addEventListener('keydown', (evento) => {
 canvas.addEventListener('touchstart', pular);
 canvas.addEventListener('mousedown', pular);
 
-//Função que atualiza a física e a movimentação do fundo
+//Função que atualiza a física e a movimentação
 function atualizar() {
-
-    //Fazendo o fundo ir para a esquerda (para dar sensação de movimento)
     fundo.x -= fundo.velocidade;
 
-    //Reiniciando o loop quando a imagem acabar
     if (fundo.x <= -fundo.largura) {
         fundo.x = 0;
     }
 
-    //Aplicando a gravidade e o pulo do caramelo
     caramelo.velocidadeY += caramelo.gravidade;
     caramelo.y += caramelo.velocidadeY;
 
-    //Fazendo a colisão com o chão
     if (caramelo.y >= chaoY - caramelo.altura) {
         caramelo.y = chaoY - caramelo.altura;
         caramelo.velocidadeY = 0;
         caramelo.noChao = true;
     }
 
-    //Atualizando os quadros da animação das patas
     if (caramelo.noChao) {
         sprite.contadorFrames++;
 
@@ -177,70 +215,108 @@ function atualizar() {
             sprite.contadorFrames = 0;
         }
     } else {
-        //Mantém um quadro fixo enquanto estiver pulando no ar
         sprite.quadroAtual = 1;
     }
 
-    //Atualizando os quadros da animação do carro
     carroSprite.contadorFrames++;
     if (carroSprite.contadorFrames >= carroSprite.velocidadeAnimacao) {
         carroSprite.quadroAtual = (carroSprite.quadroAtual + 1) % carroSprite.totalQuadros;
         carroSprite.contadorFrames = 0;
     }
 
-    //Controlando o tempo variado para aparecer novos carros
-    tempoProximoCarro--;
-    if (tempoProximoCarro <= 0) {
-        criarCarro();
-        tempoProximoCarro = sortearTempoCarro();
+    motoSprite.contadorFrames++;
+    if (motoSprite.contadorFrames >= motoSprite.velocidadeAnimacao) {
+        motoSprite.quadroAtual = (motoSprite.quadroAtual + 1) % motoSprite.totalQuadros;
+        motoSprite.contadorFrames = 0;
     }
 
-    //Movendo cada carro da lista e verificando colisão
+    //Controlando o tempo para aparecer novos carros
+    tempoProximoCarro--;
+    if (tempoProximoCarro <= 0) {
+        if (!spawnOcupado()) {
+            criarCarro();
+            tempoProximoCarro = sortearTempoCarro();
+        } else {
+            tempoProximoCarro = 20;
+        }
+    }
+
+    //Movendo cada carro e verificando colisão
     for (let i = carros.length - 1; i >= 0; i--) {
         const carro = carros[i];
         carro.x -= carro.velocidade;
 
-        //SE o caramelo bater no carro, reinicia o jogo inteiro
         if (verificarColisao(caramelo, carro)) {
             reiniciarJogo();
             break;
         }
 
-        //Remove o carro da memória depois que ele sair totalmente pela esquerda
         if (carro.x + carro.largura < 0) {
             carros.splice(i, 1);
         }
     }
+
+    //Controlando o tempo para aparecer novas motos
+    tempoProximaMoto--;
+    if (tempoProximaMoto <= 0) {
+        if (!spawnOcupado()) {
+            criarMoto();
+            tempoProximaMoto = sortearTempoMoto();
+        } else {
+            tempoProximaMoto = 20;
+        }
+    }
+
+    //Movendo cada moto e verificando colisão
+    for (let i = motos.length - 1; i >= 0; i--) {
+        const moto = motos[i];
+        moto.x -= moto.velocidade;
+
+        if (verificarColisao(caramelo, moto)) {
+            reiniciarJogo();
+            break;
+        }
+
+        if (moto.x + moto.largura < 0) {
+            motos.splice(i, 1);
+        }
+    }
 }
 
-//Função que desenha as sprites na tela
+//Função que desenha tudo na tela
 function desenhar() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-    //Desenhando o fundo duas vezes lado a lado, para que não fique com espaço em branco
     ctx.drawImage(fundoImg, fundo.x, 0, fundo.largura, fundo.altura);
     ctx.drawImage(fundoImg, fundo.x + fundo.largura, 0, fundo.largura, fundo.altura);
 
-    //Calculando a posição horizontal do recorte na tira da sprite do caramelo
     const recorteX = sprite.quadroAtual * sprite.larguraQuadro;
 
-    //Desenhando apenas o quadro atual da sprite do Caramelo sobre o chão da imagem
     ctx.drawImage(
         carameloImg,
-        recorteX, 0, sprite.larguraQuadro, sprite.alturaQuadro, // Onde recortar na imagem original
-        caramelo.x, caramelo.y, caramelo.largura, caramelo.altura // Onde desenhar no jogo
+        recorteX, 0, sprite.larguraQuadro, sprite.alturaQuadro,
+        caramelo.x, caramelo.y, caramelo.largura, caramelo.altura
     );
 
-    //Calculando a posição horizontal do recorte na tira da sprite do carro
     const recorteCarroX = carroSprite.quadroAtual * carroSprite.larguraQuadro;
 
-    //Desenhando todos os carros ativos na tela
     for (let i = 0; i < carros.length; i++) {
         const carro = carros[i];
         ctx.drawImage(
             carroImg,
             recorteCarroX, 0, carroSprite.larguraQuadro, carroSprite.alturaQuadro,
             carro.x, carro.y, carro.largura, carro.altura
+        );
+    }
+
+    const recorteMotoX = motoSprite.quadroAtual * motoSprite.larguraQuadro;
+
+    for (let i = 0; i < motos.length; i++) {
+        const moto = motos[i];
+        ctx.drawImage(
+            motoImg,
+            recorteMotoX, 0, motoSprite.larguraQuadro, motoSprite.alturaQuadro,
+            moto.x, moto.y, moto.largura, moto.altura
         );
     }
 }
@@ -255,13 +331,15 @@ function gameLoop() {
 //Quantidade de imagens carregadas
 let imagensCarregadas = 0;
 
-//Função que inicia o loop principal do jogo logo após carregar as 3 imagens
+//Função que inicia o loop principal do jogo logo após carregar as 4 imagens
 function verificarCarregamento() {
-    
+    motoSprite.larguraQuadro = motoImg.naturalWidth / motoSprite.totalQuadros;
+    motoSprite.alturaQuadro = motoImg.naturalHeight;
+
     imagensCarregadas++;
 
     //SE a quantidade de imagens carregas for igual a quantidade de imagens, começa
-    if (imagensCarregadas === 3) {
+    if (imagensCarregadas === 4) {
         gameLoop();
     }
 }
@@ -269,3 +347,4 @@ function verificarCarregamento() {
 carameloImg.onload = verificarCarregamento;
 fundoImg.onload = verificarCarregamento;
 carroImg.onload = verificarCarregamento;
+motoImg.onload = verificarCarregamento;
