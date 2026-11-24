@@ -1,7 +1,7 @@
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
 
-//Carregando as imagens do caramelo, do fundo, do carro e da moto
+//Carregando as imagens do caramelo, do fundo, do carro, da moto e da tela de morte
 const carameloImg = new Image();
 carameloImg.src = 'caramelo_andando_sprite.png';
 
@@ -13,6 +13,9 @@ carroImg.src = 'taxi_sprite.png';
 
 const motoImg = new Image();
 motoImg.src = 'moto_sprite.png';
+
+const telaMorteImg = new Image();
+telaMorteImg.src = 'telaDeMorte.png';
 
 //Configurando o fundo de acordo com a proporção da imagem
 const fundo = {
@@ -67,6 +70,20 @@ const caramelo = {
     noChao: true
 };
 
+//Estado de game over e área do botão REINICIAR na tela de morte
+let gameOver = false;
+const botaoReiniciar = {
+    xInicio: 0.38,
+    xFim: 0.62,
+    yInicio: 0.81,
+    yFim: 0.97
+};
+
+//Pontuação e recorde
+let pontos = 0;
+let contadorPontos = 0;
+let recorde = Number(localStorage.getItem('recordeCaramelo')) || 0;
+
 //Lista que guarda os carros que aparecem na tela
 let carros = [];
 let tempoProximoCarro = sortearTempoCarro();
@@ -119,7 +136,8 @@ function criarCarro() {
         y: chaoY - alturaCarro,
         largura: larguraCarro,
         altura: alturaCarro,
-        velocidade: 6
+        velocidade: 6,
+        pontuou: false
     });
 }
 
@@ -133,12 +151,26 @@ function criarMoto() {
         y: chaoY - alturaMoto,
         largura: larguraMoto,
         altura: alturaMoto,
-        velocidade: 7
+        velocidade: 7,
+        pontuou: false
     });
 }
 
-//Função que reinicia o jogo inteiro quando o caramelo bate em algum obstáculo
+//Função que atualiza e salva o recorde se a pontuação atual for maior
+function atualizarRecorde() {
+    if (pontos > recorde) {
+        recorde = pontos;
+        localStorage.setItem('recordeCaramelo', recorde);
+    }
+}
+
+//Função que reinicia o jogo inteiro quando clica no botão REINICIAR
 function reiniciarJogo() {
+    gameOver = false;
+    atualizarRecorde();
+    pontos = 0;
+    contadorPontos = 0;
+
     carros = [];
     tempoProximoCarro = sortearTempoCarro();
 
@@ -174,24 +206,94 @@ function verificarColisao(player, obstaculo) {
 
 //Função que faz o cachorro pular
 function pular() {
+    if (gameOver) return;
+
     if (caramelo.noChao) {
         caramelo.velocidadeY = caramelo.forcaPulo;
         caramelo.noChao = false;
     }
 }
 
-//Configurando os botões para pular
+//Função que verifica se o clique/toque caiu no botão REINICIAR da tela de morte
+function verificarCliqueTelaMorte(evento) {
+    if (!gameOver) return;
+
+    const rect = canvas.getBoundingClientRect();
+    const clienteX = evento.touches ? evento.touches[0].clientX : evento.clientX;
+    const clienteY = evento.touches ? evento.touches[0].clientY : evento.clientY;
+
+    const xCanvas = ((clienteX - rect.left) / rect.width) * canvas.width;
+    const yCanvas = ((clienteY - rect.top) / rect.height) * canvas.height;
+
+    const dentroX = xCanvas >= canvas.width * botaoReiniciar.xInicio && xCanvas <= canvas.width * botaoReiniciar.xFim;
+    const dentroY = yCanvas >= canvas.height * botaoReiniciar.yInicio && yCanvas <= canvas.height * botaoReiniciar.yFim;
+
+    if (dentroX && dentroY) {
+        reiniciarJogo();
+    }
+}
+
+//Configurando os botões para pular e reiniciar na tela de morte
 document.addEventListener('keydown', (evento) => {
+    if (gameOver && (evento.code === 'Enter' || evento.code === 'Space')) {
+        reiniciarJogo();
+        return;
+    }
+
     if (evento.code === 'Space' || evento.code === 'ArrowUp') {
         pular();
     }
 });
 
-canvas.addEventListener('touchstart', pular);
-canvas.addEventListener('mousedown', pular);
+canvas.addEventListener('touchstart', (evento) => {
+    if (gameOver) {
+        verificarCliqueTelaMorte(evento);
+    } else {
+        pular();
+    }
+});
+
+canvas.addEventListener('mousedown', (evento) => {
+    if (gameOver) {
+        verificarCliqueTelaMorte(evento);
+    } else {
+        pular();
+    }
+});
+
+//Função que desenha os pontos e o recorde no canto superior direito
+function desenharPontuacao() {
+    ctx.save();
+    ctx.font = 'bold 20px Arial';
+    ctx.textAlign = 'right';
+    ctx.fillStyle = '#ffffff';
+    ctx.strokeStyle = '#000000';
+    ctx.lineWidth = 4;
+
+    const textoPontos = `PONTOS: ${pontos}`;
+    const textoRecorde = `RECORDE: ${recorde}`;
+
+    ctx.strokeText(textoPontos, canvas.width - 20, 32);
+    ctx.fillText(textoPontos, canvas.width - 20, 32);
+
+    ctx.font = 'bold 16px Arial';
+    ctx.strokeText(textoRecorde, canvas.width - 20, 56);
+    ctx.fillText(textoRecorde, canvas.width - 20, 56);
+    ctx.restore();
+}
 
 //Função que atualiza a física e a movimentação
 function atualizar() {
+    if (gameOver) return;
+
+    //Soma +1 ponto a cada 6 frames de corrida
+    contadorPontos++;
+    if (contadorPontos >= 6) {
+        pontos++;
+        contadorPontos = 0;
+        atualizarRecorde();
+    }
+
     fundo.x -= fundo.velocidade;
 
     if (fundo.x <= -fundo.largura) {
@@ -241,13 +343,20 @@ function atualizar() {
         }
     }
 
-    //Movendo cada carro e verificando colisão
+    //Movendo cada carro e verificando colisão e pontuação ao passar
     for (let i = carros.length - 1; i >= 0; i--) {
         const carro = carros[i];
         carro.x -= carro.velocidade;
 
+        if (!carro.pontuou && carro.x + carro.largura < caramelo.x) {
+            carro.pontuou = true;
+            pontos += 10;
+            atualizarRecorde();
+        }
+
         if (verificarColisao(caramelo, carro)) {
-            reiniciarJogo();
+            atualizarRecorde();
+            gameOver = true;
             break;
         }
 
@@ -267,13 +376,20 @@ function atualizar() {
         }
     }
 
-    //Movendo cada moto e verificando colisão
+    //Movendo cada moto e verificando colisão e pontuação ao passar
     for (let i = motos.length - 1; i >= 0; i--) {
         const moto = motos[i];
         moto.x -= moto.velocidade;
 
+        if (!moto.pontuou && moto.x + moto.largura < caramelo.x) {
+            moto.pontuou = true;
+            pontos += 15;
+            atualizarRecorde();
+        }
+
         if (verificarColisao(caramelo, moto)) {
-            reiniciarJogo();
+            atualizarRecorde();
+            gameOver = true;
             break;
         }
 
@@ -319,6 +435,12 @@ function desenhar() {
             moto.x, moto.y, moto.largura, moto.altura
         );
     }
+
+    desenharPontuacao();
+
+    if (gameOver) {
+        ctx.drawImage(telaMorteImg, 0, 0, canvas.width, canvas.height);
+    }
 }
 
 //Fazendo o loop principal do jogo, que roda o tempo todo
@@ -331,7 +453,7 @@ function gameLoop() {
 //Quantidade de imagens carregadas
 let imagensCarregadas = 0;
 
-//Função que inicia o loop principal do jogo logo após carregar as 4 imagens
+//Função que inicia o loop principal do jogo logo após carregar as 5 imagens
 function verificarCarregamento() {
     motoSprite.larguraQuadro = motoImg.naturalWidth / motoSprite.totalQuadros;
     motoSprite.alturaQuadro = motoImg.naturalHeight;
@@ -339,7 +461,7 @@ function verificarCarregamento() {
     imagensCarregadas++;
 
     //SE a quantidade de imagens carregas for igual a quantidade de imagens, começa
-    if (imagensCarregadas === 4) {
+    if (imagensCarregadas === 5) {
         gameLoop();
     }
 }
@@ -348,3 +470,4 @@ carameloImg.onload = verificarCarregamento;
 fundoImg.onload = verificarCarregamento;
 carroImg.onload = verificarCarregamento;
 motoImg.onload = verificarCarregamento;
+telaMorteImg.onload = verificarCarregamento;
